@@ -16,9 +16,11 @@ setup:
 
 ip:
 	cd $(BUILD_DIR) && $(VIVADO_HLS) -f ../$(SCRIPT_DIR)/hls.tcl
+	mv $(BUILD_DIR)/accel/solution0/syn/report/mmult_hw_csynth.rpt $(PWD)/csynth.rpt
 
 bit:
 	cd $(BUILD_DIR) && $(VIVADO) -mode tcl -source ../$(SCRIPT_DIR)/classifier.tcl -nojournal -nolog
+	#echo "Dont waste your time generating the bitstream, for all test cases !!!"
 
 clean:
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) csynth.rpt

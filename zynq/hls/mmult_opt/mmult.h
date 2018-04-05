@@ -26,11 +26,7 @@ typedef unsigned long long axi_T;
 
 // Matrix dimensions specifications
 #define BATCH 8192
-/**
- * FEAT = 256 for 16x16 pixel images (256 Features) 
- * FEAT = 144 for 12x12 pixel images (144 Features) 
- */
-#define FEAT 144   /* Replace it to 144 for scaled down image */ 
+#define FEAT 144
 #define CLASSES 10
 
 // Input matrix tiling factor

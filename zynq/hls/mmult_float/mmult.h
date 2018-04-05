@@ -6,9 +6,11 @@ typedef unsigned long long axi_T;
 typedef float T;
 
 // Matrix dimensions specifications
-#define BATCH 8 // TODO: you will tweak this later
+#define BATCH 8192 // TODO: you will tweak this later
+//#define BATCH 512 // TODO: For problem D and E
 #define FEAT 256
 #define CLASSES 10
+#define TILE_SIZE 1024 // Defined for problem E
 
 // Input/Output Stream Size
 #define IS_SIZE (BATCH*FEAT/WIDTH_RATIO+(FEAT+1)*CLASSES/WIDTH_RATIO)

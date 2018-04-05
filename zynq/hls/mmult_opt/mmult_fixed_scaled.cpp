@@ -4,6 +4,7 @@
 #include "mmult.h"
 
 // --------------------------------------------------------------------
+/* The images are scaled from 16x16 pixels to 12x12 pixels */
 // function to be accelerated in HW wrapped with AXI4-Stream interface
 void mmult_hw (AXI_VAL in_stream[IS_SIZE], AXI_VAL out_stream[OS_SIZE]) {
 #pragma HLS INTERFACE s_axilite port=return     bundle=CONTROL_BUS
@@ -21,27 +22,21 @@ void mmult_hw (AXI_VAL in_stream[IS_SIZE], AXI_VAL out_stream[OS_SIZE]) {
 	w_T weight_buf[CLASSES][FEAT];
 	in_T in_buf[TILING][FEAT];
 	out_T out_buf[TILING][CLASSES];
+	axi_T input_packet_array[TILING][FEAT/IN_WIDTH_RATIO];
+	axi_T weight_packet_array[FEAT/W_WIDTH_RATIO];
+	axi_T output_packet_array[TILING][5]; /* I am desperate here, but hard coding needs to be avoided */
 
-/**
- * block factor = 64 for 16x16 pixel images (256 Features) 
- * block factor = 72 for 12x12 pixel images (144 Features) 
- */
 #pragma HLS ARRAY_PARTITION variable=weight_buf block factor=72 dim=2
 #pragma HLS ARRAY_PARTITION variable=in_buf block factor=72 dim=2
 
 	// Input and output AXI stream indices
 	int is_idx = 0;
 	int os_idx = 0;
+	int idx    = 0;
 
 	int i, j, k, w;
 	// Stream in offset vector
 	// CSE548 DONE
-	/**
-     * Isn't it fair to assume 
-	 * that CLASSES and OUT_WIDTH_RATIO
-     * is suitably aligned as done
-     * in other cases
-     */
 	UNPACK_OFFSET_LOOP : for(int i = 0; i < CLASSES - OUT_WIDTH_RATIO; i+=OUT_WIDTH_RATIO) {
 		axi_T packet = pop_stream(in_stream[is_idx++]);
 		UNPACK_OFFSET_ITER : for(int w = 0; w < OUT_WIDTH_RATIO; w++) {
@@ -60,10 +55,11 @@ void mmult_hw (AXI_VAL in_stream[IS_SIZE], AXI_VAL out_stream[OS_SIZE]) {
 	// Stream in weight matrix
 	// CSE548 DONE
 	UNPACK_WEIGHT_LOOP_CLASS : for(int i=0; i<CLASSES; i++) {
-		UNPACK_WEIGHT_LOOP_FEAT : for(int j=0; j<FEAT; j+=W_WIDTH_RATIO) {
-			axi_T packet = pop_stream(in_stream[is_idx++]);
-			UNPACK_WEIGHT_ITER : for (int w = 0; w < W_WIDTH_RATIO; w++) {
-				w_bit_T bits = (packet>>(w*W_WIDTH));
+		UNPACK_WEIGHT_LOOP_FEAT : for(int j=0, idx=0; j<FEAT; j+=W_WIDTH_RATIO, idx++) {
+#pragma HLS PIPELINE II=1
+			weight_packet_array[idx] = pop_stream(in_stream[is_idx++]);
+			UNPACK_WEIGHT: for (int w = 0; w < W_WIDTH_RATIO; w++) {
+				w_bit_T bits = (weight_packet_array[idx]>>(w*W_WIDTH));
 				weight_buf[i][j+w] = *((w_T*) &bits) & ((1ULL<<W_WIDTH)-1);
 			}
 		}
@@ -75,10 +71,13 @@ void mmult_hw (AXI_VAL in_stream[IS_SIZE], AXI_VAL out_stream[OS_SIZE]) {
 		// Stream in input tile
 		// CSE548 DONE
 		UNPACK_INPUT_LOOP_TILE : for(int i=0; i<TILING; i++) {
-			iUNPACK_INPUT_LOOP_FEAT : for(int j=0; j<FEAT; j+=IN_WIDTH_RATIO) {
-				axi_T packet = pop_stream(in_stream[is_idx++]);
-				UNPACK_INPUT_ITER : for (int w = 0; w < IN_WIDTH_RATIO; w++) {
-					in_bit_T bits = (packet>>(w*IN_WIDTH));
+#pragma HLS PIPELINE II=1
+			UNPACK_INPUT_LOOP_FEAT : for(int j=0, idx = 0; j<FEAT; j+=IN_WIDTH_RATIO, idx++) {
+				input_packet_array[i][idx] = \
+				pop_stream(in_stream[is_idx++]);
+
+				UNPACK_INPUT: for (int w = 0; w < IN_WIDTH_RATIO; w++) {
+					in_bit_T bits = (input_packet_array[i][idx]>>(w*IN_WIDTH));
 					in_buf[i][j+w] = *((in_T*) &bits) & ((1ULL<<IN_WIDTH)-1);
 				}
 			}
@@ -103,13 +102,14 @@ void mmult_hw (AXI_VAL in_stream[IS_SIZE], AXI_VAL out_stream[OS_SIZE]) {
 		// Stream out output matrix
 		// CSE548 DONE
 		PACK_OUTPUT_LOOP_TILE : for(int i=0; i<TILING; i++) {
-			PACK_OUTPUT_LOOP_CLASS : for(int j=0; j<CLASSES-OUT_WIDTH_RATIO; j+=OUT_WIDTH_RATIO) {
-				axi_T packet = 0;
+			#pragma HLS PIPELINE II=1
+			PACK_OUTPUT_LOOP_CLASS : for(int j=0, idx = 0; j<CLASSES-OUT_WIDTH_RATIO; j+=OUT_WIDTH_RATIO, idx++) {
+				output_packet_array[i][idx] = 0;
 				PACK_OUTPUT_ITER : for (int w = 0; w < OUT_WIDTH_RATIO; w++) {
 					out_bit_T bits = *((out_bit_T*) &out_buf[i][j+w]);
-					packet |= (bits & ((1ULL<<OUT_WIDTH)-1)) << (w*OUT_WIDTH);
+					output_packet_array[i][idx] |= (bits & ((1ULL<<OUT_WIDTH)-1)) << (w*OUT_WIDTH);
 				}
-				out_stream[os_idx++] = push_stream(packet,0);
+				out_stream[os_idx++] = push_stream(output_packet_array[i][idx],0);
 			}
 			axi_T packet = 0;
 			PACK_FINISH_OUTPUT : for(int j = CLASSES-OUT_WIDTH_RATIO; j < CLASSES; j++) {

@@ -1,3 +1,5 @@
+#!/home/amaity/anaconda3/bin/python3
+
 import os
 import argparse
 import struct
@@ -38,9 +40,9 @@ def download(args):
        (not os.path.exists(TRAIN_LAB)) or \
        (not os.path.exists(TEST_DAT)) or \
        (not os.path.exists(TEST_LAB)):
-        import urllib, zipfile
+        import urllib.request, zipfile
         zippath = os.path.join(os.getcwd(), "mnist.zip")
-        urllib.urlretrieve("http://data.mxnet.io/mxnet/data/mnist.zip", zippath)
+        urllib.request.urlretrieve("http://data.mxnet.io/mxnet/data/mnist.zip", zippath)
         zf = zipfile.ZipFile(zippath, "r")
         zf.extractall()
         zf.close()
@@ -68,7 +70,7 @@ def getIterator(args, mode):
     get_img = lambda idx: (lbl[idx], img[idx])
 
     # Create an iterator which returns each image in turn
-    for i in xrange(len(lbl)):
+    for i in range(len(lbl)):
         yield get_img(i)
 
 def getDataSet(args, mode):
@@ -103,7 +105,7 @@ def getDataSet(args, mode):
             # Display the image
             show(img)
             # Print label
-            print 'Label: {}'.format(lab)
+            print('Label: {}'.format(lab))
 
         data.append(datum)
         labels.append(label)
@@ -131,8 +133,24 @@ if __name__ == '__main__':
     # Extract the training dataset
     test_data, test_labels = getDataSet(args, 'test')
 
+    #print("Training Data")
+    #print(train_data.shape)
+    #print(train_data.dtype)
+	#print(train_data)
+    #print("Training Labels")
+    #print(train_labels.shape)
+    #print(train_labels.dtype)
+	#print(test_data)
+	#print(test_labels)
+    #print(offset)
+    #print(weight)
+    #print(weight.shape)
+    #print(weight.dtype)
+
     # Linear regression
-    reg = linear_model.Ridge()
+    reg = linear_model.Ridge(alpha=140.0)
+    #reg = linear_model.Ridge()
+    #reg = linear_model.ElasticNet(alpha=100.0, l1_ratio=0.8)
     reg.fit(train_data, train_labels)
 
     # Perform prediction with model
@@ -140,7 +158,7 @@ if __name__ == '__main__':
 
     # Fixed point computation
     # CSE 548: Todo: tweak the SCALE to get less than 20% classification error
-    SCALE = 0
+    SCALE = 32768
     # CSE 548 - Change me
     offset = reg.intercept_
     weight = reg.coef_
@@ -169,10 +187,10 @@ if __name__ == '__main__':
             fixed_errors += 1.
 
     # Produce stats
-    print 'Min/Max of coefficient values [{}, {}]'.format(reg.coef_.min(), reg.coef_.max())
-    print 'Min/Max of intersect values [{}, {}]'.format(reg.intercept_.min(),reg.intercept_.max())
-    print 'Misclassifications (float) = {0:.2f}%'.format(float_errors/len(test_labels)*100)
-    print 'Misclassifications (fixed) = {0:.2f}%'.format(fixed_errors/len(test_labels)*100)
+    print('Min/Max of coefficient values [{}, {}]'.format(reg.coef_.min(), reg.coef_.max()))
+    print('Min/Max of intersect values [{}, {}]'.format(reg.intercept_.min(),reg.intercept_.max()))
+    print('Misclassifications (float) = {0:.2f}%'.format(float_errors/len(test_labels)*100))
+    print('Misclassifications (fixed) = {0:.2f}%'.format(fixed_errors/len(test_labels)*100))
 
     # Dump the model and test data
     np.save('test_data', test_data)
